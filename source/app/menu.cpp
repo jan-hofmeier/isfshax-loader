@@ -138,7 +138,8 @@ bool showOptionMenu(dumpingConfig& config, bool showAccountOption) {
 
     sleep_for(1s);
     while(true) {
-        auto drives = !USE_WUT_DEVOPTAB() ? Fat32Transfer::getDrives() : StubTransfer::getDrives();
+        //auto drives = !USE_WUT_DEVOPTAB() ? Fat32Transfer::getDrives() : StubTransfer::getDrives();
+        auto drives = StubTransfer::getDrives();
         if ((drives.size()-1) < selectedDrive) selectedDrive = drives.size()-1;
 
         WHBLogFreetypeStartScreen();
