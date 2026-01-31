@@ -72,6 +72,7 @@ void showMainMenu() {
         WHBLogFreetypePrintf(L"%C Install ISFShax + sd emulation + payloadler", OPTION(0));
         WHBLogFreetypePrintf(L"%C Redownload files", OPTION(1));
         WHBLogFreetypePrintf(L"%C Boot Installer", OPTION(2));
+        WHBLogFreetypePrintf(L"%C Download Aroma", OPTION(3));
         WHBLogFreetypeScreenPrintBottom(L"===============================");
         WHBLogFreetypeScreenPrintBottom(L"\uE000 Button = Select Option \uE001 Button = Exit ISFShax Loader");
         WHBLogFreetypeScreenPrintBottom(L"");
@@ -87,7 +88,7 @@ void showMainMenu() {
                 selectedOption--;
                 break;
             }
-            if (navigatedDown() && selectedOption < 9) {
+            if (navigatedDown() && selectedOption < 3) {
                 selectedOption++;
                 break;
             }
@@ -117,6 +118,9 @@ void showMainMenu() {
             break;
         case 2:
             bootInstaller();
+            break;
+        case 3:
+            downloadAroma();
             break;
         default:
             break;
