@@ -17,6 +17,7 @@
 #include "ioapi.h"
 #include <cstring>
 #include <algorithm>
+#include <new>
 
 static size_t write_data_posix(void *ptr, size_t size, size_t nmemb, void *stream) {
     int fd = *(int*)stream;
