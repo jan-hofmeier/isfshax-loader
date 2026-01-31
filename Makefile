@@ -46,7 +46,7 @@ SOURCES		:=	source/app \
 				source/utils/fatfs \
 				source/utils/libschrift
 DATA		:=	data
-INCLUDES	:=	include
+INCLUDES	:=	include source/utils
 CONTENT		:=
 ICON		:=	dist/dumpling-icon.png
 TV_SPLASH	:=	dist/dumpling-tv-boot.png
