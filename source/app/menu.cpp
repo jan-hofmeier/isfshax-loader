@@ -1,6 +1,7 @@
 #include "menu.h"
 #include "navigation.h"
 #include "filesystem.h"
+#include "../utils/fatfs/diskio.h"
 #include "gui.h"
 #include "cfw.h"
 #include "fw_img_loader.h"
