@@ -133,7 +133,7 @@ void managePlugins(std::string posixPath) {
         }
 
         WHBLogFreetypeScreenPrintBottom(L"===============================");
-        WHBLogFreetypeScreenPrintBottom(L"\uE000 Select \uE001 Back \uE003 Delete Plugin");
+        WHBLogFreetypeScreenPrintBottom(L"\uE000 Select \uE001 Back \uE002 Delete Plugin");
         WHBLogFreetypeDrawScreen();
 
         sleep_for(100ms);
@@ -166,14 +166,14 @@ void managePlugins(std::string posixPath) {
                             if (selectedOption > 0 && selectedOption == plugins.size() - 1) {
                                 selectedOption--;
                             }
-                            refreshList = true;
+                           
                         } else {
                             setErrorPrompt(L"Failed to delete plugin!");
                             showErrorPrompt(L"OK");
                         }
                     }
                 }
-                if (refreshList) break;
+                break;
             }
             sleep_for(50ms);
         }
