@@ -1,6 +1,7 @@
 #include "filesystem.h"
 #include "cfw.h"
 #include "gui.h"
+#include "menu.h"
 #include "progress.h"
 #include "../utils/fatfs/fatfs_devoptab.h"
 #include "../utils/fatfs/ff.h"
