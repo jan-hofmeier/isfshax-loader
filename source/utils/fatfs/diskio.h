@@ -67,6 +67,9 @@ DRESULT disk_ioctl (void* pdrv, BYTE cmd, void* buff);
 #define ATA_GET_MODEL		21	/* Get model name */
 #define ATA_GET_SN			22	/* Get serial number */
 
+/* Wii U specific ioctl command */
+#define WIIU_GET_RAW_DEVICE_INFO 30
+
 #ifdef __cplusplus
 }
 #endif

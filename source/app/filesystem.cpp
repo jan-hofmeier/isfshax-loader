@@ -8,6 +8,7 @@
 
 #include <dirent.h>
 #include <sys/unistd.h>
+#include <malloc.h>
 
 static bool systemSLCMounted = false;
 static bool usbFatMounted = false;
@@ -121,7 +122,116 @@ void unmountUsbFat() {
     }
 }
 
-bool formatUsbFat() {
+static void write32LE(uint8_t* p, uint32_t v) {
+    p[0] = v & 0xFF;
+    p[1] = (v >> 8) & 0xFF;
+    p[2] = (v >> 16) & 0xFF;
+    p[3] = (v >> 24) & 0xFF;
+}
+
+bool partitionUsb(int fatPercent) {
+    unmountUsbFat();
+    if (disk_initialize((void*)1) != 0) {
+        setErrorPrompt(L"Failed to initialize USB drive!");
+        return false;
+    }
+
+    uint64_t info[2];
+    if (disk_ioctl((void*)1, WIIU_GET_RAW_DEVICE_INFO, info) != RES_OK) {
+        setErrorPrompt(L"Failed to get USB drive info!");
+        return false;
+    }
+    uint64_t totalSectors = info[0];
+    uint32_t sectorSize = ((uint32_t*)info)[2];
+
+    uint64_t driveSizeInBytes = totalSectors * sectorSize;
+    uint64_t oneGB = 1024ULL * 1024 * 1024;
+
+    uint32_t alignSectors;
+    if (driveSizeInBytes >= oneGB) {
+        alignSectors = (16 * 1024 * 1024) / sectorSize;
+    } else {
+        alignSectors = (1 * 1024 * 1024) / sectorSize;
+    }
+
+    uint64_t p1_start = alignSectors;
+    uint64_t p1_size = (totalSectors * fatPercent) / 100;
+
+    // Ensure FAT32 is at least 1GB if possible
+    if (driveSizeInBytes >= oneGB) {
+        uint64_t minSectors = oneGB / sectorSize;
+        if (p1_size < minSectors) p1_size = minSectors;
+    }
+
+    // Clip at total sectors minus start
+    if (p1_start + p1_size > totalSectors) {
+        p1_size = totalSectors - p1_start;
+    }
+
+    // MBR limit: partition size must fit in 32-bit sectors
+    if (p1_size > 0xFFFFFFFFULL) p1_size = 0xFFFFFFFFULL;
+
+    // User limit: partition can be at most 2TiB big
+    uint64_t twoTiBInSectors = (2ULL * 1024 * 1024 * 1024 * 1024) / sectorSize;
+    if (p1_size > twoTiBInSectors) p1_size = twoTiBInSectors;
+
+    uint64_t p2_start = 0;
+    uint64_t p2_size = 0;
+
+    if (fatPercent < 100 && (p1_start + p1_size < totalSectors)) {
+        p2_start = p1_start + p1_size;
+        // Align p2_start
+        p2_start = (p2_start + alignSectors - 1) / alignSectors * alignSectors;
+
+        if (p2_start < totalSectors) {
+            p2_size = totalSectors - p2_start;
+            if (p2_size > 0xFFFFFFFFULL) p2_size = 0xFFFFFFFFULL;
+            if (p2_size > twoTiBInSectors) p2_size = twoTiBInSectors;
+
+            // Limit: partition must start inside the first 2TiB
+            // Also 2TiB literal limit for starting point as requested
+            if (p2_start >= 0x100000000ULL || p2_start > twoTiBInSectors) {
+                p2_size = 0; // Can't start beyond 2TiB
+            }
+        }
+    }
+
+    // Prepare MBR
+    uint8_t* mbr = (uint8_t*)memalign(0x40, sectorSize);
+    if (!mbr) return false;
+    memset(mbr, 0, sectorSize);
+    uint8_t* pte1 = &mbr[446];
+    uint8_t* pte2 = &mbr[446 + 16];
+
+    // Partition 1 (FAT32)
+    pte1[4] = 0x0C; // FAT32 with LBA
+    write32LE(&pte1[8], (uint32_t)p1_start);
+    write32LE(&pte1[12], (uint32_t)p1_size);
+
+    // Partition 2 (NTFS)
+    if (p2_size > 0) {
+        pte2[4] = 0x07; // NTFS/exFAT
+        write32LE(&pte2[8], (uint32_t)p2_start);
+        write32LE(&pte2[12], (uint32_t)p2_size);
+    }
+
+    mbr[510] = 0x55;
+    mbr[511] = 0xAA;
+
+    WHBLogPrint("Writing MBR...");
+    WHBLogFreetypeDraw();
+    if (disk_write((void*)1, mbr, 0, 1) != RES_OK) {
+        free(mbr);
+        setErrorPrompt(L"Failed to write MBR!");
+        return false;
+    }
+    free(mbr);
+
+    // Now format the first partition
+    return formatUsbFat(true);
+}
+
+bool formatUsbFat(bool partitionTableExists) {
     unmountUsbFat(); // Make sure it's not mounted via FatFS devoptab
 
     // Initialize the drive
@@ -129,39 +239,35 @@ bool formatUsbFat() {
         return false;
     }
 
-    BYTE work[FF_MAX_SS];
-    LBA_t plist[] = {100, 0, 0, 0};
+    BYTE* work = (BYTE*)memalign(0x40, FF_MAX_SS);
+    if (!work) return false;
 
-    WHBLogPrint("Creating partition table...");
+    WHBLogPrint("Formatting FAT32 partition...");
     WHBLogFreetypeDraw();
-    FRESULT res = f_fdisk((void*)1, plist, work);
-    if (res != FR_OK) {
-        WHBLogPrintf("f_fdisk failed: %d", res);
-        WHBLogFreetypeDraw();
-        return false;
-    }
 
-    WHBLogPrint("Formatting partition...");
-    WHBLogFreetypeDraw();
+    const char* path = partitionTableExists ? "1:1" : "1:";
     MKFS_PARM opt = {FM_FAT32, 0, 0, 0, 0};
-    res = f_mkfs("1:", &opt, work, sizeof(work));
+    FRESULT res = f_mkfs(path, &opt, work, FF_MAX_SS);
     if (res != FR_OK) {
         WHBLogPrintf("f_mkfs failed: %d", res);
         WHBLogFreetypeDraw();
+        free(work);
         return false;
     }
 
     WHBLogPrint("Setting label...");
     WHBLogFreetypeDraw();
-    f_mount(NULL, (void*)"1:", 0); // Clear any previous mount
+    f_mount(NULL, (void*)path, 0); // Clear any previous mount
     FATFS *fs = (FATFS*)malloc(sizeof(FATFS));
     if (fs) {
-        f_mount(fs, (void*)"1:", 1);
-        f_setlabel(fs, "aroma");
-        f_mount(NULL, (void*)"1:", 0);
+        if (f_mount(fs, (void*)path, 1) == FR_OK) {
+            f_setlabel(fs, "aroma");
+            f_mount(NULL, (void*)path, 0);
+        }
         free(fs);
     }
 
+    free(work);
     WHBLogPrint("USB drive formatted successfully!");
     WHBLogFreetypeDraw();
     return true;

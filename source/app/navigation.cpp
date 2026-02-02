@@ -61,7 +61,7 @@ bool kpadButtonPressed(WPADButton button) {
             if (button == WPAD_BUTTON_UP) return pad.status.hold & WPAD_BUTTON_UP;
             if (button == WPAD_BUTTON_DOWN) return pad.status.hold & WPAD_BUTTON_DOWN;
             if (button == WPAD_BUTTON_LEFT) return pad.status.hold & WPAD_BUTTON_LEFT;
-            if (button == WPAD_BUTTON_RIGHT) return pad.status.hold & WPAD_BUTTON_DOWN;
+            if (button == WPAD_BUTTON_RIGHT) return pad.status.hold & WPAD_BUTTON_RIGHT;
         }
         else if (pad.status.extensionType == KPADExtensionType::WPAD_EXT_CLASSIC || pad.status.extensionType == KPADExtensionType::WPAD_EXT_MPLUS_CLASSIC) {
             if (button == WPAD_BUTTON_A) return pad.status.classic.hold & WPAD_CLASSIC_BUTTON_A;
@@ -116,11 +116,11 @@ bool navigatedDown() {
 }
 
 bool navigatedLeft() {
-    return vpadButtonPressed(VPAD_BUTTON_LEFT) || kpadButtonPressed(WPAD_BUTTON_LEFT) || getStickDirection(vpadBuffer[0].leftStick.x, 0.7) || getKPADSticksDirection(true, 0.7);
+    return vpadButtonPressed(VPAD_BUTTON_LEFT) || kpadButtonPressed(WPAD_BUTTON_LEFT) || getStickDirection(vpadBuffer[0].leftStick.x, -0.7) || getKPADSticksDirection(true, -0.7);
 }
 
 bool navigatedRight() {
-    return vpadButtonPressed(VPAD_BUTTON_RIGHT) || kpadButtonPressed(WPAD_BUTTON_RIGHT) || getStickDirection(vpadBuffer[0].leftStick.x, -0.7) || getKPADSticksDirection(true, -0.7);
+    return vpadButtonPressed(VPAD_BUTTON_RIGHT) || kpadButtonPressed(WPAD_BUTTON_RIGHT) || getStickDirection(vpadBuffer[0].leftStick.x, 0.7) || getKPADSticksDirection(true, 0.7);
 }
 
 // Button Actions
