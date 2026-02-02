@@ -8,6 +8,7 @@
 #include <string>
 #include <mutex>
 #include <sys/stat.h>
+#include <climits>
 #include <unistd.h>
 #include "ff.h"
 #include "diskio.h"
@@ -21,13 +22,13 @@ struct FatfsMount {
 
 // Structure for a file
 typedef struct {
-    FIL fil;
+    FFFIL fil;
     FatfsMount *mount;
 } fatfs_file_t;
 
 // Structure for a directory
 typedef struct {
-    DIR dir;
+    FFDIR dir;
     FILINFO info;
     FatfsMount *mount;
 } fatfs_dir_t;

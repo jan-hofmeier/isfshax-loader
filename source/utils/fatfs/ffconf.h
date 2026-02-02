@@ -166,6 +166,8 @@
 
 
 #define FF_USE_TRIM		0
+#define FF_MULTI_PARTITION 1
+
 /* This option switches support for ATA-TRIM. (0:Disable or 1:Enable)
 /  To enable this feature, also CTRL_TRIM command should be implemented to
 /  the disk_ioctl(). */
