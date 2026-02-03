@@ -14,7 +14,7 @@ const char* fatDevPaths[INTERNAL_VOLUMES] = {"/dev/sdcard01", "/dev/usb01", "/de
 bool fatMounted[INTERNAL_VOLUMES] = {false, false, false, false};
 FSAClientHandle fatClients[INTERNAL_VOLUMES] = {0, 0, 0, 0};
 IOSHandle fatHandles[INTERNAL_VOLUMES] = {-1, -1, -1, -1};
-const WORD fatSectorSizes[INTERNAL_VOLUMES] = {512, 512, 512, 512};
+WORD fatSectorSizes[INTERNAL_VOLUMES] = {512, 512, 512, 512};
 
 static int get_pdrv_index(void* pdrv) {
     if (!pdrv) return -1;
@@ -41,6 +41,14 @@ DSTATUS wiiu_mountDrive(BYTE pdrv) {
         fatClients[pdrv] = 0;
         return STA_NODISK;
     }
+
+    FSADeviceInfo deviceInfo;
+    if (FSAGetDeviceInfo(fatClients[pdrv], fatDevPaths[pdrv], &deviceInfo) == FS_ERROR_OK) {
+        fatSectorSizes[pdrv] = deviceInfo.deviceSectorSize;
+    } else {
+        fatSectorSizes[pdrv] = 512;
+    }
+
     fatMounted[pdrv] = true;
     return 0;
 }
@@ -97,7 +105,23 @@ DRESULT disk_ioctl (void* pdrv, BYTE cmd, void *buff) {
              return RES_OK;
         }
         case GET_SECTOR_SIZE: *(WORD*)buff = fatSectorSizes[idx]; return RES_OK;
+        case GET_SECTOR_SHIFT: {
+            WORD ss = fatSectorSizes[idx];
+            if (ss == 512) *(BYTE*)buff = 9;
+            else if (ss == 1024) *(BYTE*)buff = 10;
+            else if (ss == 2048) *(BYTE*)buff = 11;
+            else if (ss == 4096) *(BYTE*)buff = 12;
+            else return RES_ERROR;
+            return RES_OK;
+        }
         case GET_BLOCK_SIZE: *(DWORD*)buff = 1; return RES_OK;
+        case WIIU_GET_RAW_DEVICE_INFO: {
+             FSADeviceInfo deviceInfo = {};
+             if (FSAGetDeviceInfo(fatClients[idx], fatDevPaths[idx], &deviceInfo) != FS_ERROR_OK) return RES_ERROR;
+             ((uint64_t*)buff)[0] = deviceInfo.deviceSizeInSectors;
+             ((uint32_t*)buff)[2] = deviceInfo.deviceSectorSize;
+             return RES_OK;
+        }
     }
     return RES_PARERR;
 }

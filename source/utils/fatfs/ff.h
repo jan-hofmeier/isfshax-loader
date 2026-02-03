@@ -156,6 +156,15 @@ typedef struct {
 
 
 
+#if FF_MULTI_PARTITION		/* Multiple partition configuration */
+typedef struct {
+	BYTE pd;	/* Physical drive number */
+	BYTE pt;	/* Partition: 0:Auto detect, 1-4:Forced partition) */
+} PARTITION;
+extern const PARTITION VolToPart[FF_VOLUMES];	/* Volume - Partition resolution table */
+#endif
+
+
 /* Object ID and allocation information (FFOBJID) */
 
 typedef struct {

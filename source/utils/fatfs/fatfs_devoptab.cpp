@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <vector>
 #include <string>
-#include <mutex>
+#include <coreinit/mutex.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <limits.h>
@@ -34,7 +34,20 @@ typedef struct {
 } fatfs_dir_t;
 
 static std::vector<FatfsMount*> mounted_fs;
-static std::mutex mount_mutex;
+static OSMutex mount_mutex;
+static bool mount_mutex_inited = false;
+
+static void lock_mounts() {
+    if (!mount_mutex_inited) {
+        OSInitMutex(&mount_mutex);
+        mount_mutex_inited = true;
+    }
+    OSLockMutex(&mount_mutex);
+}
+
+static void unlock_mounts() {
+    OSUnlockMutex(&mount_mutex);
+}
 
 static int fatfs_to_errno(FRESULT res) {
     switch (res) {
@@ -68,11 +81,16 @@ static FatfsMount* get_mount_from_path(const char *path) {
     if (colon == std::string::npos) return nullptr;
     std::string name = p.substr(0, colon);
 
-    std::lock_guard<std::mutex> lock(mount_mutex);
+    lock_mounts();
+    FatfsMount* result = nullptr;
     for (const auto& m : mounted_fs) {
-        if (m->name == name) return m;
+        if (m->name == name) {
+            result = m;
+            break;
+        }
     }
-    return nullptr;
+    unlock_mounts();
+    return result;
 }
 
 static const char* strip_prefix(const char *path) {
@@ -318,10 +336,13 @@ static const devoptab_t fatfs_devoptab = {
 };
 
 bool fatfs_mount(const std::string& name, int pdrv) {
-    std::lock_guard<std::mutex> lock(mount_mutex);
+    lock_mounts();
 
     for (const auto& m : mounted_fs) {
-        if (m->name == name) return true;
+        if (m->name == name) {
+            unlock_mounts();
+            return true;
+        }
     }
 
     FatfsMount *m = new FatfsMount();
@@ -333,6 +354,7 @@ bool fatfs_mount(const std::string& name, int pdrv) {
     if (res != FR_OK) {
         free(m->fs);
         delete m;
+        unlock_mounts();
         return false;
     }
 
@@ -347,15 +369,17 @@ bool fatfs_mount(const std::string& name, int pdrv) {
         free(m->devoptab);
         free(m->fs);
         delete m;
+        unlock_mounts();
         return false;
     }
 
     mounted_fs.push_back(m);
+    unlock_mounts();
     return true;
 }
 
 bool fatfs_unmount(const std::string& name) {
-    std::lock_guard<std::mutex> lock(mount_mutex);
+    lock_mounts();
     for (auto it = mounted_fs.begin(); it != mounted_fs.end(); ++it) {
         if ((*it)->name == name) {
             f_mount(NULL, (void*)(*it)->drive_prefix.c_str(), 0);
@@ -365,8 +389,23 @@ bool fatfs_unmount(const std::string& name) {
             free((*it)->fs);
             delete *it;
             mounted_fs.erase(it);
+            unlock_mounts();
             return true;
         }
     }
+    unlock_mounts();
     return false;
+}
+
+FATFS* fatfs_get_fs(const std::string& name) {
+    lock_mounts();
+    FATFS* result = nullptr;
+    for (const auto& m : mounted_fs) {
+        if (m->name == name) {
+            result = m->fs;
+            break;
+        }
+    }
+    unlock_mounts();
+    return result;
 }

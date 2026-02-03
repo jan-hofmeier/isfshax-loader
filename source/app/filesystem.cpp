@@ -1,6 +1,7 @@
 #include "filesystem.h"
 #include "cfw.h"
 #include "gui.h"
+#include "menu.h"
 #include "progress.h"
 #include "../utils/fatfs/fatfs_devoptab.h"
 #include "../utils/fatfs/ff.h"
@@ -8,12 +9,21 @@
 
 #include <dirent.h>
 #include <sys/unistd.h>
+#include <malloc.h>
+#include <regex>
 
 static bool systemSLCMounted = false;
 static bool usbFatMounted = false;
 static bool systemMLCMounted = false;
 static bool systemUSBMounted = false;
 static bool discMounted = false;
+
+extern "C" const PARTITION VolToPart[FF_VOLUMES] = {
+    {0, 0},     // 0: SD Card (Physical 0, Auto)
+    {1, 1},     // 1: USB Partition 1 (Physical 1, Partition 1)
+    {1, 2},     // 2: USB Partition 2 (Physical 1, Partition 2)
+    {1, 0}      // 3: USB Auto (Physical 1, Auto)
+};
 
 // unmount wii hook
 extern "C" FSClient* __wut_devoptab_fs_client;
@@ -121,45 +131,131 @@ void unmountUsbFat() {
     }
 }
 
-bool formatUsbFat() {
+static void write32LE(uint8_t* p, uint32_t v) {
+    p[0] = v & 0xFF;
+    p[1] = (v >> 8) & 0xFF;
+    p[2] = (v >> 16) & 0xFF;
+    p[3] = (v >> 24) & 0xFF;
+}
+
+bool partitionUsb(int fatPercent) {
+    unmountUsbFat();
+    if (disk_initialize((void*)1) != 0) {
+        setErrorPrompt(L"Failed to initialize USB drive!");
+        return false;
+    }
+
+    uint64_t info[2];
+    if (disk_ioctl((void*)1, WIIU_GET_RAW_DEVICE_INFO, info) != RES_OK) {
+        setErrorPrompt(L"Failed to get USB drive info!");
+        return false;
+    }
+    uint64_t totalSectors = info[0];
+    uint32_t sectorSize = ((uint32_t*)info)[2];
+
+    uint64_t driveSizeInBytes = totalSectors * sectorSize;
+    uint64_t oneGB = 1024ULL * 1024 * 1024;
+    uint64_t oneGBInSectors = oneGB / sectorSize;
+    uint32_t maxSectors = 0xFFFFFFFF;
+
+    uint32_t alignSectors;
+    if (driveSizeInBytes >= oneGB) {
+        alignSectors = (16 * 1024 * 1024) / sectorSize;
+    } else {
+        alignSectors = (1 * 1024 * 1024) / sectorSize;
+    }
+
+    // Partition 1
+    uint64_t p1_start = alignSectors;
+    uint64_t p1_size = (totalSectors * fatPercent) / 100;
+    if (p1_size < oneGBInSectors && totalSectors > oneGBInSectors + alignSectors) {
+        p1_size = oneGBInSectors;
+    }
+    if (p1_size > maxSectors) p1_size = maxSectors;
+    if (p1_start + p1_size > totalSectors) p1_size = totalSectors - p1_start;
+
+    // Partition 2
+    uint64_t p2_start = 0;
+    uint64_t p2_size = 0;
+    if (fatPercent < 100) {
+        p2_start = (p1_start + p1_size + alignSectors - 1) / alignSectors * alignSectors;
+        if (p2_start < totalSectors && p2_start <= maxSectors) {
+             p2_size = totalSectors - p2_start;
+             if (p2_size > maxSectors) p2_size = maxSectors;
+        } else {
+            p2_start = 0;
+            p2_size = 0;
+        }
+    }
+
+    // Prepare MBR
+    uint8_t* mbr = (uint8_t*)memalign(0x40, sectorSize);
+    if (!mbr) return false;
+    memset(mbr, 0, sectorSize);
+    uint8_t* pte1 = &mbr[446];
+    uint8_t* pte2 = &mbr[446 + 16];
+
+    // Partition 1 (FAT32)
+    pte1[4] = 0x0C; // FAT32 with LBA
+    write32LE(&pte1[8], (uint32_t)p1_start);
+    write32LE(&pte1[12], (uint32_t)p1_size);
+
+    // Partition 2 (NTFS)
+    if (p2_size > 0) {
+        pte2[4] = 0x07; // NTFS/exFAT
+        write32LE(&pte2[8], (uint32_t)p2_start);
+        write32LE(&pte2[12], (uint32_t)p2_size);
+    }
+
+    mbr[510] = 0x55;
+    mbr[511] = 0xAA;
+
+    WHBLogPrint("Writing MBR...");
+    WHBLogFreetypeDraw();
+    if (disk_write((void*)1, mbr, 0, 1) != RES_OK) {
+        free(mbr);
+        setErrorPrompt(L"Failed to write MBR!");
+        return false;
+    }
+    free(mbr);
+
+    // Now format the first partition
+    return formatUsbFat(true);
+}
+
+bool formatUsbFat(bool partitionTableExists) {
     unmountUsbFat(); // Make sure it's not mounted via FatFS devoptab
 
     // Initialize the drive
     if (disk_initialize((void*)1) != 0) {
+        setErrorPrompt(L"Failed to initialize USB drive!");
         return false;
     }
 
-    BYTE work[FF_MAX_SS];
-    LBA_t plist[] = {100, 0, 0, 0};
+    BYTE* work = (BYTE*)memalign(0x40, FF_MAX_SS);
+    if (!work) return false;
 
-    WHBLogPrint("Creating partition table...");
+    WHBLogPrint("Formatting FAT32 partition...");
     WHBLogFreetypeDraw();
-    FRESULT res = f_fdisk((void*)1, plist, work);
-    if (res != FR_OK) {
-        WHBLogPrintf("f_fdisk failed: %d", res);
-        WHBLogFreetypeDraw();
-        return false;
-    }
 
-    WHBLogPrint("Formatting partition...");
-    WHBLogFreetypeDraw();
+    // Using logical drive "1:", which maps to Physical 1, Partition 1 via VolToPart
     MKFS_PARM opt = {FM_FAT32, 0, 0, 0, 0};
-    res = f_mkfs("1:", &opt, work, sizeof(work));
+    FRESULT res = f_mkfs("1:", &opt, work, FF_MAX_SS);
     if (res != FR_OK) {
         WHBLogPrintf("f_mkfs failed: %d", res);
         WHBLogFreetypeDraw();
+        free(work);
+        setErrorPrompt(L"Failed to format FAT32 partition!");
         return false;
     }
+    free(work);
 
-    WHBLogPrint("Setting label...");
-    WHBLogFreetypeDraw();
-    f_mount(NULL, (void*)"1:", 0); // Clear any previous mount
-    FATFS *fs = (FATFS*)malloc(sizeof(FATFS));
-    if (fs) {
-        f_mount(fs, (void*)"1:", 1);
-        f_setlabel(fs, "aroma");
-        f_mount(NULL, (void*)"1:", 0);
-        free(fs);
+    // Mount it briefly to set the label
+    if (mountUsbFat()) {
+        FATFS* fs = fatfs_get_fs("usb");
+        if (fs) {
+            f_setlabel(fs, "aroma");
+        }
     }
 
     WHBLogPrint("USB drive formatted successfully!");
@@ -176,25 +272,6 @@ bool testStorage(TITLE_LOCATION location) {
 
 bool isDiscInserted() {
     return false;
-    // if (getCFWVersion() == TIRAMISU_RPX) {
-    //     // Get the disc key via Tiramisu's CFW
-    //     std::array<uint8_t, 16> discKey = {0};
-    //     discKey.fill(0);
-    //     int32_t result = IOSUHAX_ODM_GetDiscKey(discKey.data());
-    //     if (result == 0) {
-    //         // WHBLogPrintf("%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X", discKey.at(0), discKey.at(1), discKey.at(2), discKey.at(3), discKey.at(4), discKey.at(5), discKey.at(6), discKey.at(7), discKey.at(8), discKey.at(9), discKey.at(10), discKey.at(11), discKey.at(12), discKey.at(13), discKey.at(14), discKey.at(15));
-    //         // WHBLogFreetypeDraw();
-    //         // sleep_for(3s);
-    //         return !(std::all_of(discKey.begin(), discKey.end(), [](uint8_t i) {return i==0;}));
-    //     }
-    //     else return false;
-    // }
-    // else {
-    //     // Use the older method of detecting discs
-    //     // The ios_odm module writes the disc key whenever a disc is inserted
-    //     DCInvalidateRange((void*)0xF5E10C00, 32);
-    //     return *(volatile uint32_t*)0xF5E10C00 != 0;
-    // }
 }
 
 // Filesystem Helper Functions

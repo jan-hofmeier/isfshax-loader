@@ -23,8 +23,13 @@
 #include "ff.h"			/* Declarations of FatFs API */
 #include "diskio.h"		/* Declarations of device I/O functions */
 
-#define LD2PD(vol) (vol)
-#define LD2PT(vol) 0
+#if FF_MULTI_PARTITION		/* Multiple partition configuration */
+#define LD2PD(vol) VolToPart[vol].pd
+#define LD2PT(vol) VolToPart[vol].pt
+#else							/* Single partition configuration */
+#define LD2PD(vol) (BYTE)vol	/* Each logical drive is bound to the same physical drive number */
+#define LD2PT(vol) 0			/* Always targets partition 0 or default partition */
+#endif
 
 #include <stdint.h>
 

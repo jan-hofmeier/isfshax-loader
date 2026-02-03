@@ -8,7 +8,8 @@ bool unmountSystemDrives();
 bool unmountDisc();
 void unmountUsbFat();
 
-bool formatUsbFat();
+bool formatUsbFat(bool partitionTableExists = false);
+bool partitionUsb(int fatPercent);
 
 bool isDiscMounted();
 bool isSlcMounted();
