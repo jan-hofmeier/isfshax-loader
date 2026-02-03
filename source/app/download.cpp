@@ -6,6 +6,7 @@
 #include <curl/curl.h>
 #include <string>
 #include <vector>
+#include <thread>
 #include <chrono>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -112,7 +113,7 @@ bool downloadHaxFiles() {
     WHBLogFreetypeStartScreen();
     WHBLogFreetypePrint(L"Starting download of hax files...");
     WHBLogFreetypeDrawScreen();
-    sleep_for(1s);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 
     if (!createHaxDirectories()) return false;
 
@@ -295,7 +296,7 @@ bool downloadInstallerOnly() {
     WHBLogFreetypeStartScreen();
     WHBLogFreetypePrint(L"Starting download of installer...");
     WHBLogFreetypeDrawScreen();
-    sleep_for(1s);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 
     if (!createHaxDirectories()) return false;
 

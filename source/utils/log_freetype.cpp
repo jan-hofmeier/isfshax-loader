@@ -1,6 +1,7 @@
 #include "log_freetype.h"
 #include "libschrift/schrift.h"
 #include <whb/log.h>
+#include <cstdlib>
 #include <cstring>
 #include <cstdarg>
 #include <cwchar>

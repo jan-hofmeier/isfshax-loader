@@ -61,6 +61,7 @@
 #include <locale>
 #include <codecvt>
 #include <regex>
+#include <thread>
 #include <chrono>
 #include <optional>
 #include <type_traits>
@@ -72,10 +73,8 @@
 
 using namespace std::chrono_literals;
 using namespace std::string_literals;
+using namespace std::this_thread;
 
-static inline void sleep_for(std::chrono::milliseconds ms) {
-    OSSleepTicks(OSMillisecondsToTicks(ms.count()));
-}
 
 
 // Templated bitmask operators
