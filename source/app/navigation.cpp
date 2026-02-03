@@ -54,32 +54,36 @@ bool kpadButtonPressed(WPADButton button) {
     for (const auto& pad : KPADControllers) {
         if (!pad.connected) continue;
 
+        uint32_t hold = pad.status.hold;
+
         if (pad.status.extensionType == KPADExtensionType::WPAD_EXT_CORE || pad.status.extensionType == KPADExtensionType::WPAD_EXT_NUNCHUK || pad.status.extensionType == KPADExtensionType::WPAD_EXT_MPLUS_NUNCHUK) {
-            if (button == WPAD_BUTTON_A) return pad.status.hold & WPAD_BUTTON_A;
-            if (button == WPAD_BUTTON_B) return pad.status.hold & WPAD_BUTTON_B;
-            if (button == WPAD_BUTTON_PLUS) return pad.status.hold & WPAD_BUTTON_PLUS;
-            if (button == WPAD_BUTTON_UP) return pad.status.hold & WPAD_BUTTON_UP;
-            if (button == WPAD_BUTTON_DOWN) return pad.status.hold & WPAD_BUTTON_DOWN;
-            if (button == WPAD_BUTTON_LEFT) return pad.status.hold & WPAD_BUTTON_LEFT;
-            if (button == WPAD_BUTTON_RIGHT) return pad.status.hold & WPAD_BUTTON_RIGHT;
+            if (button == WPAD_BUTTON_A) return (hold & WPAD_BUTTON_A);
+            if (button == WPAD_BUTTON_B) return (hold & WPAD_BUTTON_B);
+            if (button == WPAD_BUTTON_PLUS) return (hold & WPAD_BUTTON_PLUS);
+            if (button == WPAD_BUTTON_UP) return (hold & WPAD_BUTTON_UP);
+            if (button == WPAD_BUTTON_DOWN) return (hold & WPAD_BUTTON_DOWN);
+            if (button == WPAD_BUTTON_LEFT) return (hold & WPAD_BUTTON_LEFT);
+            if (button == WPAD_BUTTON_RIGHT) return (hold & WPAD_BUTTON_RIGHT);
         }
         else if (pad.status.extensionType == KPADExtensionType::WPAD_EXT_CLASSIC || pad.status.extensionType == KPADExtensionType::WPAD_EXT_MPLUS_CLASSIC) {
-            if (button == WPAD_BUTTON_A) return pad.status.classic.hold & WPAD_CLASSIC_BUTTON_A;
-            if (button == WPAD_BUTTON_B) return pad.status.classic.hold & WPAD_CLASSIC_BUTTON_B;
-            if (button == WPAD_BUTTON_PLUS) return pad.status.classic.hold & WPAD_CLASSIC_BUTTON_PLUS;
-            if (button == WPAD_BUTTON_UP) return pad.status.classic.hold & WPAD_CLASSIC_BUTTON_UP;
-            if (button == WPAD_BUTTON_DOWN) return pad.status.classic.hold & WPAD_CLASSIC_BUTTON_DOWN;
-            if (button == WPAD_BUTTON_LEFT) return pad.status.classic.hold & WPAD_CLASSIC_BUTTON_LEFT;
-            if (button == WPAD_BUTTON_RIGHT) return pad.status.classic.hold & WPAD_CLASSIC_BUTTON_RIGHT;
+            uint32_t classicHold = pad.status.classic.hold;
+            if (button == WPAD_BUTTON_A) return classicHold & WPAD_CLASSIC_BUTTON_A;
+            if (button == WPAD_BUTTON_B) return classicHold & WPAD_CLASSIC_BUTTON_B;
+            if (button == WPAD_BUTTON_PLUS) return classicHold & WPAD_CLASSIC_BUTTON_PLUS;
+            if (button == WPAD_BUTTON_UP) return classicHold & WPAD_CLASSIC_BUTTON_UP;
+            if (button == WPAD_BUTTON_DOWN) return classicHold & WPAD_CLASSIC_BUTTON_DOWN;
+            if (button == WPAD_BUTTON_LEFT) return classicHold & WPAD_CLASSIC_BUTTON_LEFT;
+            if (button == WPAD_BUTTON_RIGHT) return classicHold & WPAD_CLASSIC_BUTTON_RIGHT;
         }
         else if (pad.status.extensionType == KPADExtensionType::WPAD_EXT_PRO_CONTROLLER) {
-            if (button == WPAD_BUTTON_A) return pad.status.pro.hold & WPAD_PRO_BUTTON_A;
-            if (button == WPAD_BUTTON_B) return pad.status.pro.hold & WPAD_PRO_BUTTON_B;
-            if (button == WPAD_BUTTON_PLUS) return pad.status.pro.hold & WPAD_PRO_BUTTON_PLUS;
-            if (button == WPAD_BUTTON_UP) return pad.status.pro.hold & WPAD_PRO_BUTTON_UP;
-            if (button == WPAD_BUTTON_DOWN) return pad.status.pro.hold & WPAD_PRO_BUTTON_DOWN;
-            if (button == WPAD_BUTTON_LEFT) return pad.status.pro.hold & WPAD_PRO_BUTTON_LEFT;
-            if (button == WPAD_BUTTON_RIGHT) return pad.status.pro.hold & WPAD_PRO_BUTTON_RIGHT;
+            uint32_t proHold = pad.status.pro.hold;
+            if (button == WPAD_BUTTON_A) return proHold & WPAD_PRO_BUTTON_A;
+            if (button == WPAD_BUTTON_B) return proHold & WPAD_PRO_BUTTON_B;
+            if (button == WPAD_BUTTON_PLUS) return proHold & WPAD_PRO_BUTTON_PLUS;
+            if (button == WPAD_BUTTON_UP) return proHold & WPAD_PRO_BUTTON_UP;
+            if (button == WPAD_BUTTON_DOWN) return proHold & WPAD_PRO_BUTTON_DOWN;
+            if (button == WPAD_BUTTON_LEFT) return proHold & WPAD_PRO_BUTTON_LEFT;
+            if (button == WPAD_BUTTON_RIGHT) return proHold & WPAD_PRO_BUTTON_RIGHT;
         }
     }
     return false;
@@ -108,19 +112,19 @@ bool getKPADSticksDirection(bool XAxis, float threshold) {
 }
 
 bool navigatedUp() {
-    return vpadButtonPressed(VPAD_BUTTON_UP) || kpadButtonPressed(WPAD_BUTTON_UP) || getStickDirection(vpadBuffer[0].leftStick.y, 0.7) || getKPADSticksDirection(false, 0.7);
+    return vpadButtonPressed(VPAD_BUTTON_UP) || kpadButtonPressed(WPAD_BUTTON_UP) || getStickDirection(vpadBuffer[0].leftStick.y, 0.5f) || getKPADSticksDirection(false, 0.5f);
 }
 
 bool navigatedDown() {
-    return vpadButtonPressed(VPAD_BUTTON_DOWN) || kpadButtonPressed(WPAD_BUTTON_DOWN) || getStickDirection(vpadBuffer[0].leftStick.y, -0.7) || getKPADSticksDirection(false, -0.7);
+    return vpadButtonPressed(VPAD_BUTTON_DOWN) || kpadButtonPressed(WPAD_BUTTON_DOWN) || getStickDirection(vpadBuffer[0].leftStick.y, -0.5f) || getKPADSticksDirection(false, -0.5f);
 }
 
 bool navigatedLeft() {
-    return vpadButtonPressed(VPAD_BUTTON_LEFT) || kpadButtonPressed(WPAD_BUTTON_LEFT) || getStickDirection(vpadBuffer[0].leftStick.x, -0.7) || getKPADSticksDirection(true, -0.7);
+    return vpadButtonPressed(VPAD_BUTTON_LEFT) || kpadButtonPressed(WPAD_BUTTON_LEFT) || getStickDirection(vpadBuffer[0].leftStick.x, -0.5f) || getKPADSticksDirection(true, -0.5f);
 }
 
 bool navigatedRight() {
-    return vpadButtonPressed(VPAD_BUTTON_RIGHT) || kpadButtonPressed(WPAD_BUTTON_RIGHT) || getStickDirection(vpadBuffer[0].leftStick.x, 0.7) || getKPADSticksDirection(true, 0.7);
+    return vpadButtonPressed(VPAD_BUTTON_RIGHT) || kpadButtonPressed(WPAD_BUTTON_RIGHT) || getStickDirection(vpadBuffer[0].leftStick.x, 0.5f) || getKPADSticksDirection(true, 0.5f);
 }
 
 // Button Actions

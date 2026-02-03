@@ -10,12 +10,20 @@
 #include <dirent.h>
 #include <sys/unistd.h>
 #include <malloc.h>
+#include <regex>
 
 static bool systemSLCMounted = false;
 static bool usbFatMounted = false;
 static bool systemMLCMounted = false;
 static bool systemUSBMounted = false;
 static bool discMounted = false;
+
+extern "C" const PARTITION VolToPart[FF_VOLUMES] = {
+    {0, 0},     // 0: SD Card (Physical 0, Auto)
+    {1, 1},     // 1: USB Partition 1 (Physical 1, Partition 1)
+    {1, 2},     // 2: USB Partition 2 (Physical 1, Partition 2)
+    {1, 0}      // 3: USB Auto (Physical 1, Auto)
+};
 
 // unmount wii hook
 extern "C" FSClient* __wut_devoptab_fs_client;
@@ -147,6 +155,8 @@ bool partitionUsb(int fatPercent) {
 
     uint64_t driveSizeInBytes = totalSectors * sectorSize;
     uint64_t oneGB = 1024ULL * 1024 * 1024;
+    uint64_t oneGBInSectors = oneGB / sectorSize;
+    uint32_t maxSectors = 0xFFFFFFFF;
 
     uint32_t alignSectors;
     if (driveSizeInBytes >= oneGB) {
@@ -155,45 +165,26 @@ bool partitionUsb(int fatPercent) {
         alignSectors = (1 * 1024 * 1024) / sectorSize;
     }
 
+    // Partition 1
     uint64_t p1_start = alignSectors;
     uint64_t p1_size = (totalSectors * fatPercent) / 100;
-
-    // Ensure FAT32 is at least 1GB if possible
-    if (driveSizeInBytes >= oneGB) {
-        uint64_t minSectors = oneGB / sectorSize;
-        if (p1_size < minSectors) p1_size = minSectors;
+    if (p1_size < oneGBInSectors && totalSectors > oneGBInSectors + alignSectors) {
+        p1_size = oneGBInSectors;
     }
+    if (p1_size > maxSectors) p1_size = maxSectors;
+    if (p1_start + p1_size > totalSectors) p1_size = totalSectors - p1_start;
 
-    // Clip at total sectors minus start
-    if (p1_start + p1_size > totalSectors) {
-        p1_size = totalSectors - p1_start;
-    }
-
-    // MBR limit: partition size must fit in 32-bit sectors
-    if (p1_size > 0xFFFFFFFFULL) p1_size = 0xFFFFFFFFULL;
-
-    // User limit: partition can be at most 2TiB big
-    uint64_t twoTiBInSectors = (2ULL * 1024 * 1024 * 1024 * 1024) / sectorSize;
-    if (p1_size > twoTiBInSectors) p1_size = twoTiBInSectors;
-
+    // Partition 2
     uint64_t p2_start = 0;
     uint64_t p2_size = 0;
-
-    if (fatPercent < 100 && (p1_start + p1_size < totalSectors)) {
-        p2_start = p1_start + p1_size;
-        // Align p2_start
-        p2_start = (p2_start + alignSectors - 1) / alignSectors * alignSectors;
-
-        if (p2_start < totalSectors) {
-            p2_size = totalSectors - p2_start;
-            if (p2_size > 0xFFFFFFFFULL) p2_size = 0xFFFFFFFFULL;
-            if (p2_size > twoTiBInSectors) p2_size = twoTiBInSectors;
-
-            // Limit: partition must start inside the first 2TiB
-            // Also 2TiB literal limit for starting point as requested
-            if (p2_start >= 0x100000000ULL || p2_start > twoTiBInSectors) {
-                p2_size = 0; // Can't start beyond 2TiB
-            }
+    if (fatPercent < 100) {
+        p2_start = (p1_start + p1_size + alignSectors - 1) / alignSectors * alignSectors;
+        if (p2_start < totalSectors && p2_start <= maxSectors) {
+             p2_size = totalSectors - p2_start;
+             if (p2_size > maxSectors) p2_size = maxSectors;
+        } else {
+            p2_start = 0;
+            p2_size = 0;
         }
     }
 
@@ -229,7 +220,7 @@ bool partitionUsb(int fatPercent) {
     free(mbr);
 
     // Now format the first partition
-    return formatUsbFat();
+    return formatUsbFat(true);
 }
 
 bool formatUsbFat(bool partitionTableExists) {
@@ -237,6 +228,7 @@ bool formatUsbFat(bool partitionTableExists) {
 
     // Initialize the drive
     if (disk_initialize((void*)1) != 0) {
+        setErrorPrompt(L"Failed to initialize USB drive!");
         return false;
     }
 
@@ -246,29 +238,26 @@ bool formatUsbFat(bool partitionTableExists) {
     WHBLogPrint("Formatting FAT32 partition...");
     WHBLogFreetypeDraw();
 
-    const char* path = "1:";
+    // Using logical drive "1:", which maps to Physical 1, Partition 1 via VolToPart
     MKFS_PARM opt = {FM_FAT32, 0, 0, 0, 0};
-    FRESULT res = f_mkfs(path, &opt, work, FF_MAX_SS);
+    FRESULT res = f_mkfs("1:", &opt, work, FF_MAX_SS);
     if (res != FR_OK) {
         WHBLogPrintf("f_mkfs failed: %d", res);
         WHBLogFreetypeDraw();
         free(work);
+        setErrorPrompt(L"Failed to format FAT32 partition!");
         return false;
     }
+    free(work);
 
-    WHBLogPrint("Setting label...");
-    WHBLogFreetypeDraw();
-    f_mount(NULL, (void*)path, 0); // Clear any previous mount
-    FATFS *fs = (FATFS*)malloc(sizeof(FATFS));
-    if (fs) {
-        if (f_mount(fs, (void*)path, 1) == FR_OK) {
+    // Mount it briefly to set the label
+    if (mountUsbFat()) {
+        FATFS* fs = fatfs_get_fs("usb");
+        if (fs) {
             f_setlabel(fs, "aroma");
-            f_mount(NULL, (void*)path, 0);
         }
-        free(fs);
     }
 
-    free(work);
     WHBLogPrint("USB drive formatted successfully!");
     WHBLogFreetypeDraw();
     return true;
@@ -283,25 +272,6 @@ bool testStorage(TITLE_LOCATION location) {
 
 bool isDiscInserted() {
     return false;
-    // if (getCFWVersion() == TIRAMISU_RPX) {
-    //     // Get the disc key via Tiramisu's CFW
-    //     std::array<uint8_t, 16> discKey = {0};
-    //     discKey.fill(0);
-    //     int32_t result = IOSUHAX_ODM_GetDiscKey(discKey.data());
-    //     if (result == 0) {
-    //         // WHBLogPrintf("%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X", discKey.at(0), discKey.at(1), discKey.at(2), discKey.at(3), discKey.at(4), discKey.at(5), discKey.at(6), discKey.at(7), discKey.at(8), discKey.at(9), discKey.at(10), discKey.at(11), discKey.at(12), discKey.at(13), discKey.at(14), discKey.at(15));
-    //         // WHBLogFreetypeDraw();
-    //         // sleep_for(3s);
-    //         return !(std::all_of(discKey.begin(), discKey.end(), [](uint8_t i) {return i==0;}));
-    //     }
-    //     else return false;
-    // }
-    // else {
-    //     // Use the older method of detecting discs
-    //     // The ios_odm module writes the disc key whenever a disc is inserted
-    //     DCInvalidateRange((void*)0xF5E10C00, 32);
-    //     return *(volatile uint32_t*)0xF5E10C00 != 0;
-    // }
 }
 
 // Filesystem Helper Functions

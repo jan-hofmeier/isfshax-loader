@@ -5,7 +5,6 @@
 #define FFCONF_DEF	5380	/* Revision ID */
 #define FF_VOLUMES	4
 #define FF_MULTI_PARTITION	1
-#define LD2PT(vol) ((vol) == 1 ? 1 : 0)
 
 /*---------------------------------------------------------------------------/
 / Function Configurations

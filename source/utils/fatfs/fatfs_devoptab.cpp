@@ -370,3 +370,11 @@ bool fatfs_unmount(const std::string& name) {
     }
     return false;
 }
+
+FATFS* fatfs_get_fs(const std::string& name) {
+    std::lock_guard<std::mutex> lock(mount_mutex);
+    for (const auto& m : mounted_fs) {
+        if (m->name == name) return m->fs;
+    }
+    return nullptr;
+}
