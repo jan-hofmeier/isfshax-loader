@@ -5811,6 +5811,9 @@ FRESULT f_mkfs (
 	if (FatFs[vol]) FatFs[vol]->fs_type = 0;	/* Clear the fs object if mounted */
 	pdrv = (void*)(uintptr_t)LD2PD(vol);		/* Hosting physical drive */
 	ipart = LD2PT(vol);		/* Hosting partition (0:create as new, 1..:existing partition) */
+	if (ipart == 0 && IsDigit(*path)) {
+		ipart = (BYTE)(*path - '0');
+	}
 
 	/* Initialize the hosting physical drive */
 	ds = disk_initialize(pdrv);
