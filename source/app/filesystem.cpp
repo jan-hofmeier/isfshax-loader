@@ -229,7 +229,7 @@ bool partitionUsb(int fatPercent) {
     free(mbr);
 
     // Now format the first partition
-    return formatUsbFat(true);
+    return formatUsbFat();
 }
 
 bool formatUsbFat(bool partitionTableExists) {
@@ -246,7 +246,7 @@ bool formatUsbFat(bool partitionTableExists) {
     WHBLogPrint("Formatting FAT32 partition...");
     WHBLogFreetypeDraw();
 
-    const char* path = partitionTableExists ? "1:1" : "1:";
+    const char* path = "1:";
     MKFS_PARM opt = {FM_FAT32, 0, 0, 0, 0};
     FRESULT res = f_mkfs(path, &opt, work, FF_MAX_SS);
     if (res != FR_OK) {

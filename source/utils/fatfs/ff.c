@@ -23,8 +23,12 @@
 #include "ff.h"			/* Declarations of FatFs API */
 #include "diskio.h"		/* Declarations of device I/O functions */
 
+#ifndef LD2PD
 #define LD2PD(vol) (vol)
+#endif
+#ifndef LD2PT
 #define LD2PT(vol) 0
+#endif
 
 #include <stdint.h>
 
@@ -5811,9 +5815,6 @@ FRESULT f_mkfs (
 	if (FatFs[vol]) FatFs[vol]->fs_type = 0;	/* Clear the fs object if mounted */
 	pdrv = (void*)(uintptr_t)LD2PD(vol);		/* Hosting physical drive */
 	ipart = LD2PT(vol);		/* Hosting partition (0:create as new, 1..:existing partition) */
-	if (ipart == 0 && IsDigit(*path)) {
-		ipart = (BYTE)(*path - '0');
-	}
 
 	/* Initialize the hosting physical drive */
 	ds = disk_initialize(pdrv);
