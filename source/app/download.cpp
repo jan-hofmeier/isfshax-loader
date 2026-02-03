@@ -6,7 +6,6 @@
 #include <curl/curl.h>
 #include <string>
 #include <vector>
-#include <thread>
 #include <chrono>
 #include <sys/stat.h>
 #include <fcntl.h>

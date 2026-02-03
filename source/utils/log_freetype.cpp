@@ -1,6 +1,5 @@
 #include "log_freetype.h"
 #include "libschrift/schrift.h"
-#include <mutex>
 #include <whb/log.h>
 #include <cstring>
 #include <cstdarg>
@@ -34,13 +33,7 @@ int32_t cursorSpaceWidth = 0;
 uint8_t* fontBuffer;
 std::unordered_map<SFT_Glyph, SFT_Image> glyphCache;
 
-#define ENABLE_THREADSAFE FALSE
-#if ENABLE_THREADSAFE
-std::mutex _mutex;
-#define DEBUG_THREADSAFE std::scoped_lock<std::mutex> lck(_mutex);
-#else
 #define DEBUG_THREADSAFE do {} while(0)
-#endif
 
 static void FreetypeSetLine(uint32_t position, const wchar_t *line) {
     DEBUG_THREADSAFE;
