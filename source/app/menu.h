@@ -2,7 +2,6 @@
 
 void showLoadingScreen();
 void showMainMenu();
-void showPluginManager();
 
 uint8_t showDialogPrompt(const wchar_t* message, const wchar_t* button1, const wchar_t* button2);
 void showDialogPrompt(const wchar_t* message, const wchar_t* button);
