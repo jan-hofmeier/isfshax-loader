@@ -7,11 +7,40 @@
 #include <malloc.h>
 #include <cstring>
 #include <coreinit/ios.h>
+#include <coreinit/filesystem_fsa.h>
+
+typedef struct __attribute__((packed)) {
+    uint32_t unused;
+    char device[0x280];
+    char filesystem[8];
+    uint32_t flags;
+    uint32_t param_5;
+    uint32_t param_6;
+} FSAFormatRequest;
+
+typedef struct __attribute__((packed)) {
+    uint32_t unused;
+    char device[0x280];
+    char path[0x280];
+    uint32_t flags;
+    uint32_t arg_len;
+} FSAMountRequest;
+
+typedef struct __attribute__((packed)) {
+    uint32_t unused;
+    char path[0x280];
+    uint32_t flags;
+} FSAUnmountRequest;
 
 typedef struct __attribute__((aligned(0x40))) {
     uint32_t handle;
     uint32_t command;
-    uint8_t inbuf[0x520 - 8];
+    union {
+        uint8_t inbuf[0x520 - 8];
+        FSAFormatRequest format;
+        FSAMountRequest mount;
+        FSAUnmountRequest unmount;
+    };
     uint8_t padding[0x20]; // Align outbuf to 0x40 boundary (0x520 + 0x20 = 0x540)
     uint8_t outbuf[0x293];
 } FSAIpcData;
@@ -24,13 +53,12 @@ static int32_t FSA_Format(int fsaFd, const char* device, const char* filesystem,
     data->handle = (uint32_t)fsaFd;
     data->command = 0x69;
 
-    strncpy((char*)data->inbuf + 4, device, 0x27F);
-    strncpy((char*)data->inbuf + 0x284, filesystem, 8);
+    strncpy(data->format.device, device, sizeof(data->format.device) - 1);
+    strncpy(data->format.filesystem, filesystem, sizeof(data->format.filesystem) - 1);
 
-    // Direct assignments since we are on a Big Endian system
-    *(uint32_t*)&data->inbuf[0x28C] = flags;
-    *(uint32_t*)&data->inbuf[0x290] = param_5;
-    *(uint32_t*)&data->inbuf[0x294] = param_6;
+    data->format.flags = flags;
+    data->format.param_5 = param_5;
+    data->format.param_6 = param_6;
 
     int32_t ret = IOS_Ioctl(fsaFd, 0x69, data, 0x520, data->outbuf, 0x293);
 
@@ -46,8 +74,8 @@ static int32_t FSA_Unmount(int fsaFd, const char* path, uint32_t flags) {
     data->handle = (uint32_t)fsaFd;
     data->command = 0x02;
 
-    strncpy((char*)data->inbuf + 4, path, 0x27F);
-    *(uint32_t*)&data->inbuf[0x284] = flags;
+    strncpy(data->unmount.path, path, sizeof(data->unmount.path) - 1);
+    data->unmount.flags = flags;
 
     int32_t ret = IOS_Ioctl(fsaFd, 0x02, data, 0x520, data->outbuf, 0x293);
 
@@ -63,12 +91,11 @@ static int32_t FSA_Mount(int fsaFd, const char* device, const char* path, uint32
     data->handle = (uint32_t)fsaFd;
     data->command = 0x01;
 
-    strncpy((char*)data->inbuf + 4, device, 0x27F);
-    strncpy((char*)data->inbuf + 0x284, path, 0x27F);
+    strncpy(data->mount.device, device, sizeof(data->mount.device) - 1);
+    strncpy(data->mount.path, path, sizeof(data->mount.path) - 1);
 
-    // Correcting offsets based on ARM-side fsa.c (ARM offset + 8 for PPC)
-    *(uint32_t*)&data->inbuf[0x504] = flags;
-    *(uint32_t*)&data->inbuf[0x508] = arg_len;
+    data->mount.flags = flags;
+    data->mount.arg_len = arg_len;
 
     IOSVec iov[3];
     iov[0].ptr = data;
@@ -90,7 +117,7 @@ void formatSdAndDownloadAromaMenu() {
 
     WHBLogPrint("Opening /dev/fsa...");
     WHBLogFreetypeDraw();
-    int fsaFd = IOS_Open("/dev/fsa", (IOSOpenMode)0);
+    int fsaFd = FSAOpen();
     if (fsaFd < 0) {
         setErrorPrompt(L"Failed to open /dev/fsa!");
         showErrorPrompt(L"OK");
@@ -113,7 +140,7 @@ void formatSdAndDownloadAromaMenu() {
         WHBLogFreetypeDraw();
         setErrorPrompt(L"Failed to format SD card!");
         showErrorPrompt(L"OK");
-        IOS_Close(fsaFd);
+        FSAClose(fsaFd);
         return;
     }
 
@@ -125,7 +152,7 @@ void formatSdAndDownloadAromaMenu() {
          WHBLogFreetypeDraw();
          setErrorPrompt(L"Failed to mount SD card after format!");
          showErrorPrompt(L"OK");
-         IOS_Close(fsaFd);
+         FSAClose(fsaFd);
          return;
     }
 
@@ -138,5 +165,5 @@ void formatSdAndDownloadAromaMenu() {
         showErrorPrompt(L"OK");
     }
 
-    IOS_Close(fsaFd);
+    FSAClose(fsaFd);
 }
