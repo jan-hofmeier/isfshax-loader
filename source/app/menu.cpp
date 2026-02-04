@@ -1,5 +1,6 @@
 #include "menu.h"
 #include "pluginmanager.h"
+#include "partition_manager.h"
 #include "navigation.h"
 #include "filesystem.h"
 #include "gui.h"
@@ -113,6 +114,7 @@ void showMainMenu() {
         WHBLogFreetypePrintf(L"%C Boot Installer", OPTION(2));
         WHBLogFreetypePrintf(L"%C Download Aroma", OPTION(3));
         WHBLogFreetypePrintf(L"%C Format USB and Download Aroma", OPTION(4));
+        WHBLogFreetypePrintf(L"%C Format SD and Download Aroma", OPTION(5));
         WHBLogFreetypePrint(L"");
         WHBLogFreetypePrintf(L"%C Stroopwafel Plugin Manager", OPTION(6));
         WHBLogFreetypeScreenPrintBottom(L"===============================");
@@ -128,7 +130,7 @@ void showMainMenu() {
             // Check each button state
             if (navigatedUp()) {
                 if (selectedOption == 6) {
-                    selectedOption = 4;
+                    selectedOption = 5;
                     break;
                 } else if (selectedOption > 0) {
                     selectedOption--;
@@ -136,10 +138,10 @@ void showMainMenu() {
                 }
             }
             if (navigatedDown()) {
-                if (selectedOption == 4) {
+                if (selectedOption == 5) {
                     selectedOption = 6;
                     break;
-                } else if (selectedOption < 4) {
+                } else if (selectedOption < 5) {
                     selectedOption++;
                     break;
                 }
@@ -176,6 +178,9 @@ void showMainMenu() {
             break;
         case 4:
             formatUsbAndDownloadAromaMenu();
+            break;
+        case 5:
+            formatSdAndDownloadAromaMenu();
             break;
         case 6:
             showPluginManager();
