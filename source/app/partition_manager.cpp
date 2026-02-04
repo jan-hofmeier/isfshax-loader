@@ -12,6 +12,7 @@ typedef struct __attribute__((aligned(0x40))) {
     uint32_t handle;
     uint32_t command;
     uint8_t inbuf[0x520 - 8];
+    uint8_t padding[0x20]; // Align outbuf to 0x40 boundary (0x520 + 0x20 = 0x540)
     uint8_t outbuf[0x293];
 } FSAIpcData;
 
@@ -26,21 +27,10 @@ static int32_t FSA_Format(int fsaFd, const char* device, const char* filesystem,
     strncpy((char*)data->inbuf + 4, device, 0x27F);
     strncpy((char*)data->inbuf + 0x284, filesystem, 8);
 
-    // Manual BE conversion as in snippet
-    data->inbuf[0x28C] = (uint8_t)(flags >> 24);
-    data->inbuf[0x28D] = (uint8_t)(flags >> 16);
-    data->inbuf[0x28E] = (uint8_t)(flags >> 8);
-    data->inbuf[0x28F] = (uint8_t)flags;
-
-    data->inbuf[0x290] = (uint8_t)(param_5 >> 24);
-    data->inbuf[0x291] = (uint8_t)(param_5 >> 16);
-    data->inbuf[0x292] = (uint8_t)(param_5 >> 8);
-    data->inbuf[0x293] = (uint8_t)param_5;
-
-    data->inbuf[0x294] = (uint8_t)(param_6 >> 24);
-    data->inbuf[0x295] = (uint8_t)(param_6 >> 16);
-    data->inbuf[0x296] = (uint8_t)(param_6 >> 8);
-    data->inbuf[0x297] = (uint8_t)param_6;
+    // Direct assignments since we are on a Big Endian system
+    *(uint32_t*)&data->inbuf[0x28C] = flags;
+    *(uint32_t*)&data->inbuf[0x290] = param_5;
+    *(uint32_t*)&data->inbuf[0x294] = param_6;
 
     int32_t ret = IOS_Ioctl(fsaFd, 0x69, data, 0x520, data->outbuf, 0x293);
 
@@ -57,11 +47,7 @@ static int32_t FSA_Unmount(int fsaFd, const char* path, uint32_t flags) {
     data->command = 0x02;
 
     strncpy((char*)data->inbuf + 4, path, 0x27F);
-
-    data->inbuf[0x284] = (uint8_t)(flags >> 24);
-    data->inbuf[0x285] = (uint8_t)(flags >> 16);
-    data->inbuf[0x286] = (uint8_t)(flags >> 8);
-    data->inbuf[0x287] = (uint8_t)flags;
+    *(uint32_t*)&data->inbuf[0x284] = flags;
 
     int32_t ret = IOS_Ioctl(fsaFd, 0x02, data, 0x520, data->outbuf, 0x293);
 
@@ -80,23 +66,17 @@ static int32_t FSA_Mount(int fsaFd, const char* device, const char* path, uint32
     strncpy((char*)data->inbuf + 4, device, 0x27F);
     strncpy((char*)data->inbuf + 0x284, path, 0x27F);
 
-    data->inbuf[0x504] = (uint8_t)(flags >> 24);
-    data->inbuf[0x505] = (uint8_t)(flags >> 16);
-    data->inbuf[0x506] = (uint8_t)(flags >> 8);
-    data->inbuf[0x507] = (uint8_t)flags;
+    // Correcting offsets based on ARM-side fsa.c (ARM offset + 8 for PPC)
+    *(uint32_t*)&data->inbuf[0x504] = flags;
+    *(uint32_t*)&data->inbuf[0x508] = arg_len;
 
-    data->inbuf[0x508] = (uint8_t)(arg_len >> 24);
-    data->inbuf[0x509] = (uint8_t)(arg_len >> 16);
-    data->inbuf[0x50A] = (uint8_t)(arg_len >> 8);
-    data->inbuf[0x50B] = (uint8_t)arg_len;
-
-    iovec_s iov[3];
+    IOSVec iov[3];
     iov[0].ptr = data;
-    iov[0].length = 0x520;
+    iov[0].len = 0x520;
     iov[1].ptr = (void*)arg;
-    iov[1].length = arg_len;
+    iov[1].len = arg_len;
     iov[2].ptr = data->outbuf;
-    iov[2].length = 0x293;
+    iov[2].len = 0x293;
 
     int32_t ret = IOS_Ioctlv(fsaFd, 0x01, 2, 1, iov);
 
