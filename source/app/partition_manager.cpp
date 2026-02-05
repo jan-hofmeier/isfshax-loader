@@ -8,6 +8,8 @@
 #include <cstring>
 #include <coreinit/ios.h>
 #include <coreinit/filesystem_fsa.h>
+#include <mocha/mocha.h>
+#include <whb/sdcard.h>
 
 typedef struct __attribute__((packed)) {
     uint32_t unused;
@@ -19,14 +21,15 @@ typedef struct __attribute__((packed)) {
 } FSAFormatRequest;
 
 typedef struct __attribute__((aligned(0x40))) {
-    uint32_t handle;
-    uint32_t command;
     union {
-        uint8_t inbuf[0x520 - 8];
+        uint8_t inbuf[0x520];
         FSAFormatRequest format;
     };
-    uint8_t padding[0x20]; // Align outbuf to 0x40 boundary (0x520 + 0x20 = 0x540)
     uint8_t outbuf[0x293];
+    uint8_t padding[0x30];
+    uint32_t handle;
+    uint32_t command;
+    uint8_t unknown[0x3d];
 } FSAIpcData;
 
 static int32_t FSA_Format(FSAClientHandle handle, const char* device, const char* filesystem, uint32_t flags, uint32_t param_5, uint32_t param_6) {
@@ -54,23 +57,30 @@ void formatSdAndDownloadAromaMenu() {
     uint8_t choice = showDialogPrompt(L"WARNING: This will format the SD card and DELETE ALL DATA on it.\nDo you want to continue?", L"Yes", L"No");
     if (choice != 0) return;
 
+    // set partition start to 16MiB
+    Mocha_IOSUKernelWrite32(0x1078e4a4, 0xe3a05902);
+    // skip cylinder alignment
+    Mocha_IOSUKernelWrite32(0x1078e4fc, 0xe1530003);
+
     WHBLogPrint("Opening /dev/fsa...");
     WHBLogFreetypeDraw();
-    FSAClientHandle fsaHandle;
-    FSStatus status = FSAOpen(&fsaHandle);
-    if (status != FS_STATUS_OK) {
-        WHBLogPrintf("Failed to open /dev/fsa! Status: 0x%08X", status);
+    FSAClientHandle fsaHandle = FSAAddClient(NULL);
+    if (fsaHandle < 0) {
+        WHBLogPrintf("Failed to open /dev/fsa! Status: 0x%08X", fsaHandle);
         WHBLogFreetypeDraw();
         setErrorPrompt(L"Failed to open /dev/fsa!");
         showErrorPrompt(L"OK");
         return;
     }
+    int status;
+    // int status = Mocha_UnlockFSClientEx(fsaHandle);
+    // WHBLogPrintf("Unlocking FSClientEX Status: -0x%08X", -status);
 
     WHBLogPrint("Unmounting SD card...");
     WHBLogFreetypeDraw();
-    status = FSAUnmount(fsaHandle, "/vol/external01", (FSFlags)0x80000002);
-    if (status != FS_STATUS_OK) {
-        WHBLogPrintf("Unmount failed (status: 0x%08X), ignoring...", status);
+    status = WHBUnmountSdCard(); //FSAUnmount(fsaHandle, "/vol/external01", (FSAUnmountFlags) 0x80000002);
+    if (status != 1) {
+        WHBLogPrintf("Unmount failed (status: %d), ignoring...", status);
         WHBLogFreetypeDraw();
     }
 
@@ -78,25 +88,27 @@ void formatSdAndDownloadAromaMenu() {
     WHBLogFreetypeDraw();
     status = (FSStatus)FSA_Format(fsaHandle, "/dev/sdcard01", "fat", 0, 0, 0);
     if (status != FS_STATUS_OK) {
-        WHBLogPrintf("Format failed (status: 0x%08X)!", status);
+        WHBLogPrintf("Format failed (status: -0x%08X)!\n", -status);
         WHBLogFreetypeDraw();
         setErrorPrompt(L"Failed to format SD card!");
         showErrorPrompt(L"OK");
-        FSAClose(fsaHandle);
+        FSADelClient(fsaHandle);
         return;
     }
 
     WHBLogPrint("Mounting SD card...");
     WHBLogFreetypeDraw();
-    status = FSAMount(fsaHandle, "/dev/sdcard01", "/vol/external01", (FSFlags)2, NULL, 0);
-    if (status != FS_STATUS_OK) {
-         WHBLogPrintf("Mount failed (status: 0x%08X)!", status);
-         WHBLogFreetypeDraw();
-         setErrorPrompt(L"Failed to mount SD card after format!");
-         showErrorPrompt(L"OK");
-         FSAClose(fsaHandle);
-         return;
+    status = WHBMountSdCard(); //FSAMount(fsaHandle, "/dev/sdcard01", "/vol/external01", (FSAMountFlags)2, NULL, 0);
+    if (status != 1) {
+        WHBLogPrintf("Mount failed (status: %d)!", status);
+        WHBLogFreetypeDraw();
+        setErrorPrompt(L"Failed to mount SD card after format!");
+        showErrorPrompt(L"OK");
+        FSADelClient(fsaHandle);
+        return;
     }
+
+    FSADelClient(fsaHandle);
 
     WHBLogPrint("SD card formatted and mounted. Downloading Aroma...");
     WHBLogFreetypeDraw();
@@ -106,6 +118,4 @@ void formatSdAndDownloadAromaMenu() {
     } else {
         showErrorPrompt(L"OK");
     }
-
-    FSAClose(fsaHandle);
 }

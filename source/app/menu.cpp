@@ -200,7 +200,7 @@ uint8_t showDialogPrompt(const wchar_t* message, const wchar_t* button1, const w
     sleep_for(100ms);
     uint8_t selectedOption = 0;
     while(true) {
-        WHBLogFreetypeStartScreen();
+        //WHBLogFreetypeStartScreen();
 
         // Print each line
         std::wistringstream messageStream(message);
@@ -236,6 +236,7 @@ uint8_t showDialogPrompt(const wchar_t* message, const wchar_t* button1, const w
             }
 
             if (pressedOk()) {
+                WHBLogFreetypeStartScreen();
                 return selectedOption;
             }
 
