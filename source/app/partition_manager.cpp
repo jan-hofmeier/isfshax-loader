@@ -62,6 +62,25 @@ void formatSdAndDownloadAromaMenu() {
     // skip cylinder alignment
     Mocha_IOSUKernelWrite32(0x1078e4fc, 0xe1530003);
 
+    // Remove 32GB check
+    //Mocha_IOSUKernelWrite32(0x1078e354, 0xe1540004);
+
+    // Return something for big cards
+    Mocha_IOSUKernelWrite32(0x1078de88, 0xe3a00000); // mov r0, #0
+
+    // Increase cluster size for >32GB
+    Mocha_IOSUKernelWrite32(0x1078e35c, 0xe3a07080); // mov r7, #128
+    Mocha_IOSUKernelWrite32(0x1078e360, 0xE5CD7270); // strb r7, [sp, #local_3c.sectors_per_cluster]
+    Mocha_IOSUKernelWrite32(0x1078e364, 0xEA000071); // b 0x1078e530
+
+    Mocha_IOSUKernelWrite32(0x1078e550, 0xe3a00000); // mov r0, #0 - patch out memset
+    //Mocha_IOSUKernelWrite32(0x1078e55c, 0xe3a00000); // mov r0, #0 - patch out  FAT32_GetGeometry
+
+    Mocha_IOSUKernelWrite32(0x1078e6c8, 0xe3a00000); // mov r0, #0 - patch out memset
+    Mocha_IOSUKernelWrite32(0x1078e6d4, 0xe3a00000); // mov r0, #0 - patch out  FAT32_GetGeometry
+
+    Mocha_IOSUKernelWrite32(0x1078ee74, 12345678);
+
     WHBLogPrint("Opening /dev/fsa...");
     WHBLogFreetypeDraw();
     FSAClientHandle fsaHandle = FSAAddClient(NULL);
