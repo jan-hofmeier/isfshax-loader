@@ -57,29 +57,58 @@ void formatSdAndDownloadAromaMenu() {
     uint8_t choice = showDialogPrompt(L"WARNING: This will format the SD card and DELETE ALL DATA on it.\nDo you want to continue?", L"Yes", L"No");
     if (choice != 0) return;
 
+    // 0 = use whole drive. Else the end of the partition in sectors
+    uint32_t custom_size = 8 * 1024 * 1024 * 2; // 8GB default size for testing
+
     // set partition start to 16MiB
-    Mocha_IOSUKernelWrite32(0x1078e4a4, 0xe3a05902);
+    //Mocha_IOSUKernelWrite32(0x1078e4a4, 0xe3a05902);
     // skip cylinder alignment
-    Mocha_IOSUKernelWrite32(0x1078e4fc, 0xe1530003);
+    //Mocha_IOSUKernelWrite32(0x1078e4fc, 0xe1530003);
 
     // Remove 32GB check
-    //Mocha_IOSUKernelWrite32(0x1078e354, 0xe1540004);
+    if(!custom_size) {
+        Mocha_IOSUKernelWrite32(0x1078e354, 0xEA000075); // b 0x1078e530
+    } else {
+        // 1. Load the custom sector count from 0x1078e360 into R4
+        // Opcode: LDR R4, [PC, #8] -> PC is 0x35C, Target is 0x360
+        Mocha_IOSUKernelWrite32(0x1078e354, 0xE59F4010); 
 
-    // Return something for big cards
-    Mocha_IOSUKernelWrite32(0x1078de88, 0xe3a00000); // mov r0, #0
+        // 2. Store R4 into the FSFAT_BlockCount struct
+        // Opcode: STR R4, [R2, #0x14]
+        Mocha_IOSUKernelWrite32(0x1078e358, 0xE5824014);
 
-    // Increase cluster size for >32GB
-    Mocha_IOSUKernelWrite32(0x1078e35c, 0xe3a07080); // mov r7, #128
-    Mocha_IOSUKernelWrite32(0x1078e360, 0xE5CD7270); // strb r7, [sp, #local_3c.sectors_per_cluster]
-    Mocha_IOSUKernelWrite32(0x1078e364, 0xEA000071); // b 0x1078e530
+        // str r4, [sp, #0x88]  FStack_240.block_count_hi
+        Mocha_IOSUKernelWrite32(0x1078e35c, 0xE58D4088);
 
-    Mocha_IOSUKernelWrite32(0x1078e550, 0xe3a00000); // mov r0, #0 - patch out memset
-    //Mocha_IOSUKernelWrite32(0x1078e55c, 0xe3a00000); // mov r0, #0 - patch out  FAT32_GetGeometry
+        // 3. Jump to the FAT32 formatting logic (Original BLS target: 1078e530)
+        // Math: 0x1078e530 - (0x1078e35c + 8) = 0x1CC -> 0x1CC / 4 = 0x73
+        Mocha_IOSUKernelWrite32(0x1078e360, 0xEA000072); // b 0x1078e530
 
-    Mocha_IOSUKernelWrite32(0x1078e6c8, 0xe3a00000); // mov r0, #0 - patch out memset
-    Mocha_IOSUKernelWrite32(0x1078e6d4, 0xe3a00000); // mov r0, #0 - patch out  FAT32_GetGeometry
+        // 4. THE DATA: Your total sector count read by LDR
+        Mocha_IOSUKernelWrite32(0x1078e36c, custom_size);
+    }
 
-    Mocha_IOSUKernelWrite32(0x1078ee74, 12345678);
+
+    // Patch SD Geometry Table
+    // last entry:
+    Mocha_IOSUKernelWrite32(0x1080bf20, 0xffffffff); //max size
+
+    // // Return something for big cards
+    // Mocha_IOSUKernelWrite32(0x1078de88, 0xe3a00000); // mov r0, #0
+    
+    // // Increase cluster size for >32GB
+    // Mocha_IOSUKernelWrite32(0x1078e35c, 0xe3a07080); // mov r7, #128
+    // Mocha_IOSUKernelWrite32(0x1078e360, 0xE5CD7270); // strb r7, [sp, #local_3c.sectors_per_cluster]
+    // Mocha_IOSUKernelWrite32(0x1078e364, 0xEA000071); // b 0x1078e530
+
+    // Mocha_IOSUKernelWrite32(0x1078e550, 0xe3a00000); // mov r0, #0 - patch out memset
+    // //Mocha_IOSUKernelWrite32(0x1078e55c, 0xe3a00000); // mov r0, #0 - patch out  FAT32_GetGeometry
+
+    // Mocha_IOSUKernelWrite32(0x1078e6c8, 0xe3a00000); // mov r0, #0 - patch out memset
+    // Mocha_IOSUKernelWrite32(0x1078e6d4, 0xe3a00000); // mov r0, #0 - patch out  FAT32_GetGeometry
+
+    // // Custom Error
+    // Mocha_IOSUKernelWrite32(0x1078ee74, 12345678);
 
     WHBLogPrint("Opening /dev/fsa...");
     WHBLogFreetypeDraw();
